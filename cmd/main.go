@@ -2,10 +2,13 @@ package main
 
 import (
 	"log"
+	"strings"
 
 	"api/utils"
 
 	"api/internal"
+
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/postgres"
@@ -13,9 +16,14 @@ import (
 )
 
 func main() {
-	r := gin.Default()
+	if err := strings.TrimSpace(os.Getenv("JWT_SECRET_KEY")); err == "" {
+		if err := utils.GenerateJWTPrivateKey(); err != nil {
+			log.Fatalln("Ошибка генерации jwtSecretKey: ", err)
+		}
+	}
 	var err error
-	dsn := "host=localhost user=postgres dbname=notesdb port=5432 sslmode=disable"
+	r := gin.Default()
+	dsn := "host=localhost user=postgres dbname=glimpsedb port=5432 sslmode=disable"
 	utils.Db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalln("Ошибка инциализации базы данных: ", err)

@@ -1,6 +1,10 @@
 package internal
 
-import "time"
+import (
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
 
 type Message struct {
 	Id        int64     `json:"id" gorm:"primaryKey"`
@@ -45,4 +49,12 @@ type User struct {
 	LastOnline time.Time `json:"lastOnline"`
 	Friends    []Friend  `json:"friends" gorm:"foreignKey:UserID"`
 	CreatedAt  time.Time `json:"crated_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type Claims struct {
+	UserId    int64     `json:"user_id"`
+	UserName  string    `json:"userName"`
+	CreatedAt time.Time `json:"crated_at"`
+	jwt.RegisteredClaims
 }
