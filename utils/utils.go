@@ -5,14 +5,12 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"time"
-
-	"api/internal"
 
 	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/gorm"
@@ -20,7 +18,14 @@ import (
 
 var Db *gorm.DB
 
-func GenerateJWTPrivateKey() error {
+type Claims struct {
+	UserId    int64     `json:"user_id"`
+	UserName  string    `json:"userName"`
+	CreatedAt time.Time `json:"crated_at"`
+	jwt.RegisteredClaims
+}
+
+func GenerateJWTSecretKey() error {
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		log.Println("Ошибка генрации приватного ключа: ", err)
@@ -46,10 +51,29 @@ func GenerateJWTPrivateKey() error {
 	return nil
 }
 
-func GenerateJWT(userId int64, userName string, createdAt time.Time) (string, error) {
-	secretKey, _ := base64.URLEncoding.DecodeString(os.Getenv("JWT_SCRET_KEY"))
+func DecodeJWTSecretKey() (*ecdsa.PrivateKey, error) {
+	block, _ := pem.Decode([]byte(os.Getenv("JWT_SECRET_KEY")))
+
+	if block == nil || block.Type != "EC PRIVATE KEY" {
+		return nil, fmt.Errorf("не удалось декодировать PEM-блок приватного ключа или неверный тип")
+	}
+
+	privateKey, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		log.Println("Ошибка прасинга pem строки: ", err)
+		return nil, err
+	}
+
+	return privateKey, nil
+}
+
+func GenerateJWTToken(userId int64, userName string, createdAt time.Time) (string, error) {
+	secretKey, err := DecodeJWTSecretKey()
+	if err != nil {
+		return "", err
+	}
 	expirationTime := time.Now().Add(24 * time.Hour)
-	claims := &internal.Claims{
+	claims := &Claims{
 		UserId:    userId,
 		UserName:  userName,
 		CreatedAt: createdAt,

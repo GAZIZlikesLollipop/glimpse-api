@@ -17,7 +17,7 @@ import (
 
 func main() {
 	if err := strings.TrimSpace(os.Getenv("JWT_SECRET_KEY")); err == "" {
-		if err := utils.GenerateJWTPrivateKey(); err != nil {
+		if err := utils.GenerateJWTSecretKey(); err != nil {
 			log.Fatalln("Ошибка генерации jwtSecretKey: ", err)
 		}
 	}
