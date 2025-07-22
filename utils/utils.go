@@ -96,3 +96,24 @@ func GenerateJWTToken(userId int64, userName string, createdAt time.Time) (strin
 
 	return tokenString, nil
 }
+
+func ValidateJWTToken(tokenString string) (*Claims, error) {
+	secretKey := os.Getenv("JWT_SECRET_KEY")
+	var claims Claims
+	token, err := jwt.ParseWithClaims(tokenString, &claims, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodECDSA); !ok {
+			return nil, fmt.Errorf("неожиданный метод подписи: %v", t.Header["alg"])
+		}
+		return secretKey, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !token.Valid {
+		return nil, fmt.Errorf("Введенные токен не валидный")
+	}
+
+	return &claims, nil
+}

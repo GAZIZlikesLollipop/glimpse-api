@@ -6,7 +6,7 @@ import (
 
 type Message struct {
 	Id        int64     `json:"id" gorm:"primaryKey"`
-	ChatID    int64     `json:"chat_id" gorm:"not null"`
+	FriendID  int64     `json:"friend_id" gorm:"not null"`
 	Content   string    `json:"content"`
 	Owner     User      `json:"owner"`
 	CreatedAt time.Time `json:"crated_at"`
@@ -34,6 +34,7 @@ type FirendUser struct {
 
 type Friend struct {
 	Id       int64     `json:"id" gorm:"primaryKey"`
+	UserID   int64     `json:"user_id"`
 	Data     User      `json:"user"`
 	Messages []Message `json:"messages" gorm:"foreignKey:FriendID"`
 }

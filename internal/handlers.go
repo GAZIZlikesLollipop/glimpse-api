@@ -72,6 +72,27 @@ func SignIn(c *gin.Context) {
 
 func AuthMiddleWare() gin.HandlerFunc {
 	return func(c *gin.Context) {
-
+		header := c.GetHeader("Authorization")
+		if header != "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неправильный заголовок"})
+			c.Abort()
+			return
+		}
+		if len(header) < 7 || header[:7] != "Bearer " {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неправильный заголовок"})
+			c.Abort()
+			return
+		}
+		token := header[7:]
+		claims, err := utils.ValidateJWTToken(token)
+		if err != nil {
+			log.Println("Недействительный токен jwt: ", err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен jwt"})
+			c.Abort()
+			return
+		}
+		c.Set("userId", claims.UserId)
+		c.Set("userName", claims.UserName)
+		c.Next()
 	}
 }
