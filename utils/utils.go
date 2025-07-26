@@ -8,11 +8,16 @@ import (
 	"encoding/pem"
 	"fmt"
 	"log"
+	"net"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -116,4 +121,58 @@ func ValidateJWTToken(tokenString string) (*Claims, error) {
 	}
 
 	return &claims, nil
+}
+
+func SaveAvatarFile(
+	c *gin.Context,
+	name string,
+) (string, error) {
+	var filePath string
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Println("Ошибка поулчения домашней диреткории: ", err)
+		return "", err
+	}
+	absolutePath := filepath.Join(homeDir, "glimpse-avatars")
+	if err := os.MkdirAll(absolutePath, 0755); err != nil {
+		log.Println("Ошибка создания диреткории")
+		return "", err
+	}
+	file, err := c.FormFile("avatar")
+	if err != nil {
+		log.Println("Ошибка обработки файла: ", err)
+		return "", err
+	}
+
+	filePath = fmt.Sprintf("%s-%s%s", name, uuid.New(), strings.ToLower(filepath.Ext(file.Filename)))
+
+	if err := c.SaveUploadedFile(file, filepath.Join(absolutePath, filePath)); err != nil {
+		log.Println("Ошибка сохранения файла: ", err)
+		return "", err
+	}
+
+	var addr string
+
+	ipaces, err := net.InterfaceAddrs()
+	if err != nil {
+		log.Println("Ошибка поулчения интерфейсов: ", err)
+		return "", err
+	}
+
+	for i := 0; len(ipaces) > i; i++ {
+		if ipaces[i].String()[0:6] == "192.168" {
+			for ind := 0; len(ipaces[i].String()) > ind; ind++ {
+				if string(ipaces[i].String()[ind]) != "/" {
+					addr += string(ipaces[i].String()[ind])
+				} else {
+					break
+				}
+			}
+			break
+		} else {
+			continue
+		}
+	}
+
+	return fmt.Sprintf("https://%s:8080/avatars/%s", addr, filePath), nil
 }

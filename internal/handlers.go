@@ -4,34 +4,108 @@ import (
 	"api/utils"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func SignUp(c *gin.Context) {
-	var user User
-	if err := c.ShouldBindJSON(&user); err != nil {
-		log.Println("Ошибка обработки тела запроса: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обработки тела запроса"})
+func GetUser(c *gin.Context) {
+	rawUserId, exists := c.Get("userId")
+	if !exists {
+		log.Println("Ошибка получения данных с токена")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения данных с токена"})
 		return
 	}
 
+	userId, ok := rawUserId.(int64)
+	if !ok {
+		log.Println("Ошибка преобрзаования айди")
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
+		return
+	}
+
+	var user User
+
+	if err := utils.Db.First(&user, userId).Error; err != nil {
+		log.Println("Ошибка получения пользовтеля: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получеения пользователя"})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+
+}
+
+func SignUp(c *gin.Context) {
+	var user User
+	name := c.PostForm("name")
+	if name == "" {
+		log.Println("Клиент не ввеели имя")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Вы не ввели имя"})
+		return
+	} else {
+		user.Name = name
+	}
 	var count int64
-	if err := utils.Db.Model(&User{}).Where("name = ?", user.Name).Count(&count).Error; err == nil {
+	if err := utils.Db.Model(&User{}).Where("name = ?", user.Name).Count(&count).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользователя"})
 		return
 	}
 
 	if count < 1 {
-		password, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-		if err != nil {
-			log.Println("Ошибка генерации пароля: ", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка генрации пароля"})
+		strPassword := c.PostForm("password")
+		if strPassword == "" {
+			log.Println("Пользовтель не ввел пароль")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Вы  не ввели пароль"})
 			return
+		} else {
+			password, err := bcrypt.GenerateFromPassword([]byte(strPassword), bcrypt.DefaultCost)
+			if err != nil {
+				log.Println("Ошибка генерации пароля: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка генрации пароля"})
+				return
+			}
+			user.Password = string(password)
 		}
-		user.Password = string(password)
+		bio := c.PostForm("bio")
+		if bio != "" {
+			user.Bio = bio
+		}
+		strLatitude := c.PostForm("latitude")
+		if strings.TrimSpace(strLatitude) != "" {
+			latitude, err := strconv.ParseFloat(strLatitude, 64)
+			if err != nil {
+				log.Println("Ошибка парсинга широты: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка парсинга широты"})
+				return
+			}
+			user.Latitude = latitude
+		}
+		strLongitude := c.PostForm("longitude")
+		if strings.TrimSpace(strLongitude) != "" {
+			longitude, err := strconv.ParseFloat(strLongitude, 64)
+			if err != nil {
+				log.Println("Ошибка парсинга широты: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка парсинга широты"})
+				return
+			}
+			user.Longitude = longitude
+		}
+		avatarFile := c.PostForm("avatar")
+		if strings.TrimSpace(avatarFile) != "" {
+			var err error
+			user.Avatar, err = utils.SaveAvatarFile(c, user.Name)
+			if err != nil {
+				log.Println("Ошибка сохранения файла: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
+				return
+			}
+		}
+		user.LastOnline = time.Now()
 		if err := utils.Db.Create(&user).Error; err != nil {
 			log.Println("Ошибка сохранения данных в базу данных: ", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения данных в базу данных"})
@@ -68,6 +142,77 @@ func SignIn(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusConflict, gin.H{"error": "Пользователя с таким именем не существует"})
 	}
+}
+
+func DeleteUser(c *gin.Context) {
+	rawUserId, exists := c.Get("userId")
+	if !exists {
+		log.Println("Ошибка получения данных с токена")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения данных с токена"})
+		return
+	}
+
+	userId, ok := rawUserId.(int64)
+	if !ok {
+		log.Println("Ошибка преобрзаования айди")
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
+		return
+	}
+
+	if err := utils.Db.Delete(&User{}, userId).Error; err != nil {
+		log.Println("Ошибка удаления учетной записи: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления учетной записи"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Ваша учетная запись была успешно удалена"})
+
+}
+
+func UpdateUser(c *gin.Context) {
+	var updatedUser User
+	rawUserId, exists := c.Get("userId")
+	if !exists {
+		log.Println("Ошибка получения данных с токена")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения данных с токена"})
+		return
+	}
+
+	userId, ok := rawUserId.(int64)
+	if !ok {
+		log.Println("Ошибка преобрзаования айди")
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
+		return
+	}
+
+	var user User
+	if err := utils.Db.First(&user, userId).Error; err != nil {
+		log.Println("Ошибка получения пользователя: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользоватей"})
+		return
+	}
+
+	if err := c.ShouldBindJSON(&updatedUser); err != nil {
+		log.Println("Ошибка обработки ответа: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обработки ответа"})
+		return
+	}
+
+	if updatedUser.Name != "" {
+		user.Name = updatedUser.Name
+	}
+
+	if updatedUser.Password != "" {
+		user.Password = updatedUser.Password
+	}
+
+	if err := utils.Db.Save(&user).Error; err != nil {
+		log.Println("Ошибка обновления учетной записи: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обновления учетной записи"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Успешное обновление учетной записи"})
 }
 
 func AuthMiddleWare() gin.HandlerFunc {
