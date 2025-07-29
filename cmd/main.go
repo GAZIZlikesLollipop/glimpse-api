@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"path/filepath"
 	"strings"
 
 	"api/utils"
@@ -34,6 +35,15 @@ func main() {
 		log.Fatalln("Ошибка миграции таблиц: ", err)
 		return
 	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalln("Ошибка поулчения домашней диреткории: ", err)
+	}
+	absolutePath := filepath.Join(homeDir, "glimpse-media")
+	if err := os.MkdirAll(absolutePath, 0755); err != nil {
+		log.Fatalln("Ошибка создания диреткории: ", err)
+	}
+	r.Static("/glimpse-media", absolutePath)
 	protected := r.Group("/api")
 	protected.Use(internal.AuthMiddleWare())
 	{

@@ -4,6 +4,9 @@ import (
 	"api/utils"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -95,8 +98,8 @@ func SignUp(c *gin.Context) {
 			}
 			user.Longitude = longitude
 		}
-		avatarFile := c.PostForm("avatar")
-		if strings.TrimSpace(avatarFile) != "" {
+		avatarFile, _ := c.FormFile("avatar")
+		if avatarFile != nil {
 			var err error
 			user.Avatar, err = utils.SaveAvatarFile(c, user.Name)
 			if err != nil {
@@ -127,8 +130,8 @@ func SignIn(c *gin.Context) {
 	}
 
 	if err := utils.Db.Where("name = ?", request.UserName).First(&user).Error; err != nil {
-		log.Println("Ошибка получения пользовтеля: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользовтеля"})
+		log.Println("Пользователя с таким именем не существует: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Пользователя с таким именем не существует"})
 		return
 	}
 
@@ -140,7 +143,7 @@ func SignIn(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, gin.H{"code": http.StatusOK, "message": "Вы успешно вошли в свою учетную запись", "token": token})
 	} else {
-		c.JSON(http.StatusConflict, gin.H{"error": "Пользователя с таким именем не существует"})
+		c.JSON(http.StatusConflict, gin.H{"error": "Вы ввели неверный пароль"})
 	}
 }
 
@@ -159,7 +162,35 @@ func DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if err := utils.Db.Delete(&User{}, userId).Error; err != nil {
+	var user User
+
+	if err := utils.Db.First(&user, userId).Error; err != nil {
+		log.Println("Ошибка получения пользователя: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользователя"})
+		return
+	}
+
+	if strings.TrimSpace(user.Avatar) != "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Println("Ошибка поулчения домашней диреткории: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пути к домшней директории"})
+			return
+		}
+		fileUrl, err := url.Parse(user.Avatar)
+		if err != nil {
+			log.Println("Ошибка прасинга url: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка прасинга url"})
+			return
+		}
+		if err := os.Remove(filepath.Join(homeDir, fileUrl.Path)); err != nil {
+			log.Println("Ошибка удаления файла: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления файла"})
+			return
+		}
+	}
+
+	if err := utils.Db.Delete(&user).Error; err != nil {
 		log.Println("Ошибка удаления учетной записи: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления учетной записи"})
 		return
@@ -170,7 +201,6 @@ func DeleteUser(c *gin.Context) {
 }
 
 func UpdateUser(c *gin.Context) {
-	var updatedUser User
 	rawUserId, exists := c.Get("userId")
 	if !exists {
 		log.Println("Ошибка получения данных с токена")
@@ -192,19 +222,73 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if err := c.ShouldBindJSON(&updatedUser); err != nil {
-		log.Println("Ошибка обработки ответа: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обработки ответа"})
-		return
+	name := c.PostForm("name")
+	if name != "" {
+		user.Name = name
 	}
 
-	if updatedUser.Name != "" {
-		user.Name = updatedUser.Name
+	strPassword := c.PostForm("password")
+	if strPassword != "" {
+		password, err := bcrypt.GenerateFromPassword([]byte(strPassword), bcrypt.DefaultCost)
+		if err != nil {
+			log.Println("Ошибка генерации пароля: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка генрации пароля"})
+			return
+		}
+		user.Password = string(password)
 	}
-
-	if updatedUser.Password != "" {
-		user.Password = updatedUser.Password
+	bio := c.PostForm("bio")
+	if bio != "" {
+		user.Bio = bio
 	}
+	strLatitude := c.PostForm("latitude")
+	if strings.TrimSpace(strLatitude) != "" {
+		latitude, err := strconv.ParseFloat(strLatitude, 64)
+		if err != nil {
+			log.Println("Ошибка парсинга широты: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка парсинга широты"})
+			return
+		}
+		user.Latitude = latitude
+	}
+	strLongitude := c.PostForm("longitude")
+	if strings.TrimSpace(strLongitude) != "" {
+		longitude, err := strconv.ParseFloat(strLongitude, 64)
+		if err != nil {
+			log.Println("Ошибка парсинга широты: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка парсинга широты"})
+			return
+		}
+		user.Longitude = longitude
+	}
+	avatarFile, _ := c.FormFile("avatar")
+	if avatarFile != nil {
+		var err error
+		if user.Avatar != "" {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				log.Fatalln("Ошибка поулчения домашней диреткории: ", err)
+			}
+			urlPath, err := url.Parse(user.Avatar)
+			if err != nil {
+				log.Println("Ошибка полчения урл пути: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения урл пути"})
+				return
+			}
+			if err := os.Remove(filepath.Join(homeDir, urlPath.Path)); err != nil {
+				log.Println("Ошибка удаления файла: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления файла"})
+				return
+			}
+		}
+		user.Avatar, err = utils.SaveAvatarFile(c, user.Name)
+		if err != nil {
+			log.Println("Ошибка сохранения файла: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
+			return
+		}
+	}
+	user.LastOnline = time.Now()
 
 	if err := utils.Db.Save(&user).Error; err != nil {
 		log.Println("Ошибка обновления учетной записи: ", err)
@@ -218,13 +302,13 @@ func UpdateUser(c *gin.Context) {
 func AuthMiddleWare() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
-		if header != "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неправильный заголовок"})
+		if header == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный заголовок авторизации"})
 			c.Abort()
 			return
 		}
 		if len(header) < 7 || header[:7] != "Bearer " {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неправильный заголовок"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный формат токена"})
 			c.Abort()
 			return
 		}

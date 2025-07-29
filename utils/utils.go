@@ -103,13 +103,17 @@ func GenerateJWTToken(userId int64, userName string, createdAt time.Time) (strin
 }
 
 func ValidateJWTToken(tokenString string) (*Claims, error) {
-	secretKey := os.Getenv("JWT_SECRET_KEY")
 	var claims Claims
 	token, err := jwt.ParseWithClaims(tokenString, &claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodECDSA); !ok {
 			return nil, fmt.Errorf("неожиданный метод подписи: %v", t.Header["alg"])
 		}
-		return secretKey, nil
+		token, err := DecodeJWTSecretKey()
+		if err != nil {
+			log.Println("Ошибка декодирования токена: ", err)
+			return "", nil
+		}
+		return &token.PublicKey, nil
 	})
 
 	if err != nil {
@@ -127,15 +131,14 @@ func SaveAvatarFile(
 	c *gin.Context,
 	name string,
 ) (string, error) {
-	var filePath string
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		log.Println("Ошибка поулчения домашней диреткории: ", err)
 		return "", err
 	}
-	absolutePath := filepath.Join(homeDir, "glimpse-avatars")
+	absolutePath := filepath.Join(homeDir, "glimpse-media")
 	if err := os.MkdirAll(absolutePath, 0755); err != nil {
-		log.Println("Ошибка создания диреткории")
+		log.Println("Ошибка создания диреткории: ", err)
 		return "", err
 	}
 	file, err := c.FormFile("avatar")
@@ -144,9 +147,9 @@ func SaveAvatarFile(
 		return "", err
 	}
 
-	filePath = fmt.Sprintf("%s-%s%s", name, uuid.New(), strings.ToLower(filepath.Ext(file.Filename)))
+	fileName := fmt.Sprintf("%s-%s%s", name, uuid.New(), strings.ToLower(filepath.Ext(file.Filename)))
 
-	if err := c.SaveUploadedFile(file, filepath.Join(absolutePath, filePath)); err != nil {
+	if err := c.SaveUploadedFile(file, filepath.Join(absolutePath, fileName)); err != nil {
 		log.Println("Ошибка сохранения файла: ", err)
 		return "", err
 	}
@@ -159,20 +162,20 @@ func SaveAvatarFile(
 		return "", err
 	}
 
-	for i := 0; len(ipaces) > i; i++ {
-		if ipaces[i].String()[0:6] == "192.168" {
-			for ind := 0; len(ipaces[i].String()) > ind; ind++ {
-				if string(ipaces[i].String()[ind]) != "/" {
-					addr += string(ipaces[i].String()[ind])
-				} else {
+	for _, a := range ipaces {
+		if ipnet, ok := a.(*net.IPNet); ok {
+			if !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
+				ipStr := ipnet.IP.String()
+				isPrivate := strings.HasPrefix(ipStr, "192.168.") ||
+					strings.HasPrefix(ipStr, "10.") ||
+					(strings.HasPrefix(ipStr, "172.") && len(ipStr) >= 7 && ipStr[4] >= '1' && ipStr[4] <= '3' && ipStr[5] == '.')
+				if isPrivate {
+					addr = ipnet.IP.String()
 					break
 				}
 			}
-			break
-		} else {
-			continue
 		}
 	}
 
-	return fmt.Sprintf("https://%s:8080/avatars/%s", addr, filePath), nil
+	return fmt.Sprintf("https://%s:8080/glimpse-media/%s", addr, fileName), nil
 }
