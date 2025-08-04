@@ -1,6 +1,7 @@
-package internal
+package handlers
 
 import (
+	"api/internal"
 	"api/utils"
 	"log"
 	"net/http"
@@ -30,7 +31,7 @@ func GetUser(c *gin.Context) {
 		return
 	}
 
-	var user User
+	var user internal.User
 
 	if err := utils.Db.First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользовтеля: ", err)
@@ -43,7 +44,7 @@ func GetUser(c *gin.Context) {
 }
 
 func SignUp(c *gin.Context) {
-	var user User
+	var user internal.User
 	name := c.PostForm("name")
 	if name == "" {
 		log.Println("Клиент не ввеели имя")
@@ -53,7 +54,7 @@ func SignUp(c *gin.Context) {
 		user.Name = name
 	}
 	var count int64
-	if err := utils.Db.Model(&User{}).Where("name = ?", user.Name).Count(&count).Error; err != nil {
+	if err := utils.Db.Model(&internal.User{}).Where("name = ?", user.Name).Count(&count).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользователя"})
 		return
@@ -121,8 +122,8 @@ func SignUp(c *gin.Context) {
 }
 
 func SignIn(c *gin.Context) {
-	var request AuthRequest
-	var user User
+	var request internal.AuthRequest
+	var user internal.User
 	if err := c.ShouldBindJSON(&request); err != nil {
 		log.Println("Ошибка обработки данных: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обработки данных"})
@@ -162,7 +163,7 @@ func DeleteUser(c *gin.Context) {
 		return
 	}
 
-	var user User
+	var user internal.User
 
 	if err := utils.Db.First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
@@ -215,7 +216,7 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	var user User
+	var user internal.User
 	if err := utils.Db.First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользоватей"})

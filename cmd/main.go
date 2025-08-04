@@ -8,6 +8,7 @@ import (
 	"api/utils"
 
 	"api/internal"
+	"api/internal/handlers"
 
 	"os"
 
@@ -45,14 +46,23 @@ func main() {
 	}
 	r.Static("/glimpse-media", absolutePath)
 	protected := r.Group("/api")
-	protected.Use(internal.AuthMiddleWare())
+	protected.Use(handlers.AuthMiddleWare())
 	{
-		protected.GET("/user", internal.GetUser)
-		protected.DELETE("/user", internal.DeleteUser)
-		protected.PATCH("/user", internal.UpdateUser)
+		protected.GET("/users", handlers.GetUser)
+		protected.DELETE("/users", handlers.DeleteUser)
+		protected.PATCH("/users", handlers.UpdateUser)
+
+		protected.GET("/messages/sent", handlers.GetSentMessages)
+		protected.POST("/messages/sent/:receiverId", handlers.AddSentMessage)
+		protected.DELETE("/messages/sent/:id", handlers.DeleteSentMessage)
+		protected.PATCH("/messages/sent/:id", handlers.UpdateSentMessage)
+
+		protected.GET("/messages/received", handlers.GetReceivedMessages)
+		protected.DELETE("/messages/received/:id", handlers.DeleteReceivedMessage)
+
 	}
-	r.POST("/signUp", internal.SignUp)
-	r.POST("/signIn", internal.SignIn)
+	r.POST("/signUp", handlers.SignUp)
+	r.POST("/signIn", handlers.SignIn)
 	if err := r.RunTLS("0.0.0.0:8080", "server.crt", "server.key"); err != nil {
 		log.Fatalln("Ошибка запуска сервера: ", err)
 		return
