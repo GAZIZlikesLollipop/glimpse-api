@@ -33,7 +33,7 @@ func GetUser(c *gin.Context) {
 
 	var user internal.User
 
-	if err := utils.Db.First(&user, userId).Error; err != nil {
+	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользовтеля: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получеения пользователя"})
 		return
@@ -165,7 +165,7 @@ func DeleteUser(c *gin.Context) {
 
 	var user internal.User
 
-	if err := utils.Db.First(&user, userId).Error; err != nil {
+	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользователя"})
 		return
@@ -189,6 +189,24 @@ func DeleteUser(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления файла"})
 			return
 		}
+	}
+
+	if err := utils.Db.Model(&user).Association("Friends").Clear(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления друзей"})
+		log.Println("Ошибка удаления друзей: ", err)
+		return
+	}
+
+	if err := utils.Db.Model(&user).Association("SentMessages").Clear(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления сообщений"})
+		log.Println("Ошибка удаления сообщений: ", err)
+		return
+	}
+
+	if err := utils.Db.Model(&user).Association("ReceivedMessages").Clear(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления сообщений"})
+		log.Println("Ошибка удаления сообщений: ", err)
+		return
 	}
 
 	if err := utils.Db.Delete(&user).Error; err != nil {
@@ -289,6 +307,7 @@ func UpdateUser(c *gin.Context) {
 			return
 		}
 	}
+
 	user.LastOnline = time.Now()
 
 	if err := utils.Db.Save(&user).Error; err != nil {

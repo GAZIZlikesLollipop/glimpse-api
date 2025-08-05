@@ -60,6 +60,9 @@ func main() {
 		protected.GET("/messages/received", handlers.GetReceivedMessages)
 		protected.DELETE("/messages/received/:id", handlers.DeleteReceivedMessage)
 
+		protected.GET("/friends/:id", handlers.AddFriend)
+		protected.DELETE("/friends/:id", handlers.DeleteFriend)
+
 	}
 	r.POST("/signUp", handlers.SignUp)
 	r.POST("/signIn", handlers.SignIn)

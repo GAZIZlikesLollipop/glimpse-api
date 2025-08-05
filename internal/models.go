@@ -15,19 +15,19 @@ type Message struct {
 }
 
 type User struct {
-	Id         int64     `json:"id" gorm:"primaryKey"`
-	Name       string    `json:"name"`
-	Password   string    `json:"password"`
-	Avatar     string    `json:"avatar"`
-	Bio        string    `json:"bio"`
-	Latitude   float64   `json:"latitude"`
-	Longitude  float64   `json:"longitude"`
-	LastOnline time.Time `json:"lastOnline"`
-	Friends    []User    `json:"friends" gorm:"many2many:user_friends;"`
-	// SentMessages     []Message `json:"sentMessages" gorm:"foreignKey:SenderId"`
-	// ReceivedMessages []Message `json:"receivedMessages" gorm:"foreignKey:ReceiverId"`
-	CreatedAt time.Time `json:"crated_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Id               int64     `json:"id" gorm:"primaryKey"`
+	Name             string    `json:"name"`
+	Password         string    `json:"password"`
+	Avatar           string    `json:"avatar"`
+	Bio              string    `json:"bio"`
+	Latitude         float64   `json:"latitude"`
+	Longitude        float64   `json:"longitude"`
+	LastOnline       time.Time `json:"lastOnline"`
+	Friends          []User    `json:"friends" gorm:"many2many:user_friends;"`
+	SentMessages     []Message `json:"sentMessages" gorm:"foreignKey:SenderId"`
+	ReceivedMessages []Message `json:"receivedMessages" gorm:"foreignKey:ReceiverId"`
+	CreatedAt        time.Time `json:"crated_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type AuthRequest struct {
