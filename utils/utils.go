@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -121,7 +122,7 @@ func ValidateJWTToken(tokenString string) (*Claims, error) {
 	}
 
 	if !token.Valid {
-		return nil, fmt.Errorf("Введенные токен не валидный")
+		return nil, fmt.Errorf("введенные токен не валидный")
 	}
 
 	return &claims, nil
@@ -178,4 +179,31 @@ func SaveAvatarFile(
 	}
 
 	return fmt.Sprintf("https://%s:8080/glimpse-media/%s", addr, fileName), nil
+}
+
+func AuthMiddleWare() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		header := c.GetHeader("Authorization")
+		if header == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный заголовок авторизации"})
+			c.Abort()
+			return
+		}
+		if len(header) < 7 || header[:7] != "Bearer " {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный формат токена"})
+			c.Abort()
+			return
+		}
+		token := header[7:]
+		claims, err := ValidateJWTToken(token)
+		if err != nil {
+			log.Println("Недействительный токен jwt: ", err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен jwt"})
+			c.Abort()
+			return
+		}
+		c.Set("userId", claims.UserId)
+		c.Set("userName", claims.UserName)
+		c.Next()
+	}
 }

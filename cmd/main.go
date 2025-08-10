@@ -46,7 +46,7 @@ func main() {
 	}
 	r.Static("/glimpse-media", absolutePath)
 	protected := r.Group("/api")
-	protected.Use(handlers.AuthMiddleWare())
+	protected.Use(utils.AuthMiddleWare())
 	{
 		protected.GET("/users", handlers.GetUser)
 		protected.DELETE("/users", handlers.DeleteUser)
@@ -63,6 +63,7 @@ func main() {
 		protected.GET("/friends/:id", handlers.AddFriend)
 		protected.DELETE("/friends/:id", handlers.DeleteFriend)
 
+		protected.GET("/ws", handlers.WebSocket)
 	}
 	r.POST("/signUp", handlers.SignUp)
 	r.POST("/signIn", handlers.SignIn)

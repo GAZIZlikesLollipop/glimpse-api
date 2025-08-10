@@ -3,6 +3,7 @@ package handlers
 import (
 	"api/internal"
 	"api/utils"
+	"encoding/json"
 	"log"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -142,7 +144,8 @@ func SignIn(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка генрации токена"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"code": http.StatusOK, "message": "Вы успешно вошли в свою учетную запись", "token": token})
+		// c.JSON(http.StatusOK, gin.H{"code": http.StatusOK, "message": "Вы успешно вошли в свою учетную запись", "token": token})
+		c.JSON(http.StatusOK, token)
 	} else {
 		c.JSON(http.StatusConflict, gin.H{"error": "Вы ввели неверный пароль"})
 	}
@@ -316,32 +319,72 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Успешное обновление учетной записи"})
+	user.Id = userId
+
+	// c.JSON(http.StatusOK, gin.H{"message": "Успешное обновление учетной записи"})
+	c.JSON(http.StatusOK, user)
 }
 
-func AuthMiddleWare() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		if header == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный заголовок авторизации"})
-			c.Abort()
-			return
-		}
-		if len(header) < 7 || header[:7] != "Bearer " {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный формат токена"})
-			c.Abort()
-			return
-		}
-		token := header[7:]
-		claims, err := utils.ValidateJWTToken(token)
-		if err != nil {
-			log.Println("Недействительный токен jwt: ", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен jwt"})
-			c.Abort()
-			return
-		}
-		c.Set("userId", claims.UserId)
-		c.Set("userName", claims.UserName)
-		c.Next()
+func WebSocket(c *gin.Context) {
+	rawUserId, exists := c.Get("userId")
+	if !exists {
+		log.Println("Ошибка получения данных с токена")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения данных с токена"})
+		return
 	}
+
+	userId, ok := rawUserId.(int64)
+	if !ok {
+		log.Println("Ошибка преобрзаования айди")
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
+		return
+	}
+	var user internal.User
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		// CheckOrigin: func(r *http.Request) bool {
+		// 	return true
+		// },
+	}
+	cnn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Println("Ошибка создания webSocket соединения: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания websocket соединения"})
+		return
+
+	}
+	defer cnn.Close()
+
+	cnn.WriteMessage(websocket.TextMessage, []byte("WebSocket соединение успешно создано"))
+
+	for {
+		msgType, _, err := cnn.ReadMessage()
+		if err != nil {
+			log.Println("Ошибка получения сообщения: ", err)
+			cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получения сообщения"))
+			break
+		}
+
+		if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&user, userId).Error; err != nil {
+			log.Println("Ошибка получения пользовтеля: ", err)
+			cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
+			return
+		}
+
+		if data, err := json.Marshal(user); err != nil {
+			log.Println("Ошибка преобразования типов: ", err)
+			cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка преобразования типов"))
+			break
+		} else {
+			if err := cnn.WriteMessage(msgType, data); err != nil {
+				log.Println("Ошибка отправки сообщения: ", err)
+				cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка отправки сообщения"))
+				break
+			}
+		}
+
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "WebSocket соединение успешно разорвано!"})
 }
