@@ -187,7 +187,7 @@ func DeleteUser(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка прасинга url"})
 			return
 		}
-		if err := os.Remove(filepath.Join(homeDir, fileUrl.Path)); err != nil {
+		if err := os.Remove(filepath.Join(homeDir, "glimpse", fileUrl.Path)); err != nil {
 			log.Println("Ошибка удаления файла: ", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления файла"})
 			return
@@ -297,7 +297,7 @@ func UpdateUser(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения урл пути"})
 				return
 			}
-			if err := os.Remove(filepath.Join(homeDir, urlPath.Path)); err != nil {
+			if err := os.Remove(filepath.Join(homeDir, "glimpse", urlPath.Path)); err != nil {
 				log.Println("Ошибка удаления файла: ", err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления файла"})
 				return
@@ -321,7 +321,6 @@ func UpdateUser(c *gin.Context) {
 
 	user.Id = userId
 
-	// c.JSON(http.StatusOK, gin.H{"message": "Успешное обновление учетной записи"})
 	c.JSON(http.StatusOK, user)
 }
 
@@ -339,27 +338,32 @@ func WebSocket(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
 		return
 	}
-	var user internal.User
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		// CheckOrigin: func(r *http.Request) bool {
-		// 	return true
-		// },
 	}
 	cnn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Println("Ошибка создания webSocket соединения: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания websocket соединения"})
 		return
-
 	}
 	defer cnn.Close()
+
+	var user internal.User
+
+	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&user, userId).Error; err != nil { // 	log.Println("Ошибка получения пользовтеля: ", err)
+		log.Println("Ошибка получения пользователя: ", err)
+		cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
+		return
+	}
+
+	utils.TcpCns[user.Name] = cnn
 
 	cnn.WriteMessage(websocket.TextMessage, []byte("WebSocket соединение успешно создано"))
 
 	for {
-		msgType, _, err := cnn.ReadMessage()
+		_, _, err := cnn.ReadMessage()
 		if err != nil {
 			log.Println("Ошибка получения сообщения: ", err)
 			cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получения сообщения"))
@@ -372,15 +376,38 @@ func WebSocket(c *gin.Context) {
 			return
 		}
 
-		if data, err := json.Marshal(user); err != nil {
+		if data, err := json.Marshal(&user); err != nil {
 			log.Println("Ошибка преобразования типов: ", err)
 			cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка преобразования типов"))
 			break
 		} else {
-			if err := cnn.WriteMessage(msgType, data); err != nil {
-				log.Println("Ошибка отправки сообщения: ", err)
-				cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка отправки сообщения"))
-				break
+			for _, o := range user.Friends {
+				for k, v := range utils.TcpCns {
+					if o.Name == k {
+						var friend internal.User
+						if err := utils.Db.Where("name = ?", k).Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&friend).Error; err != nil {
+							log.Println("Ошибка получения пользовтеля: ", err)
+							cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
+							return
+						}
+						friendData, err := json.Marshal(friend)
+						if err != nil {
+							log.Println("Ошибка кодирования json: ", err)
+							cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка кодирования json"))
+							return
+						}
+						if err := v.WriteMessage(websocket.TextMessage, friendData); err != nil {
+							log.Println("Ошибка отправки json: ", err)
+							cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка отпрваки json"))
+							return
+						}
+					}
+				}
+			}
+			if err := cnn.WriteMessage(websocket.TextMessage, data); err != nil {
+				log.Println("Ошибка отправки json: ", err)
+				cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка отпрваки json"))
+				return
 			}
 		}
 

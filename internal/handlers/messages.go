@@ -11,32 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func GetSentMessages(c *gin.Context) {
-	rawUserId, exists := c.Get("userId")
-	if !exists {
-		log.Println("Ошибка получения данных с токена")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения данных с токена"})
-		return
-	}
-
-	userId, ok := rawUserId.(int64)
-	if !ok {
-		log.Println("Ошибка преобрзаования айди")
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
-		return
-	}
-
-	var sentMessages []internal.Message
-
-	if err := utils.Db.Where("sender_id = ?", userId).Find(&sentMessages).Error; err != nil {
-		log.Println("Ошибка получения сообщений: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка полчения сообщений"})
-		return
-	}
-
-	c.JSON(http.StatusOK, sentMessages)
-}
-
 func AddSentMessage(c *gin.Context) {
 	rawReceiverId := c.Param("receiverId")
 	receiverId, err := strconv.ParseInt(rawReceiverId, 10, 64)
@@ -134,32 +108,6 @@ func UpdateSentMessage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Успешное обновление сообщения"})
-}
-
-func GetReceivedMessages(c *gin.Context) {
-	rawUserId, exists := c.Get("userId")
-	if !exists {
-		log.Println("Ошибка получения данных с токена")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения данных с токена"})
-		return
-	}
-
-	userId, ok := rawUserId.(int64)
-	if !ok {
-		log.Println("Ошибка преобрзаования айди")
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
-		return
-	}
-
-	var receivedMessages []internal.Message
-
-	if err := utils.Db.Where("receiver_id = ?", userId).Find(&receivedMessages).Error; err != nil {
-		log.Println("Ошибка получения сообщений: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка полчения сообщений"})
-		return
-	}
-
-	c.JSON(http.StatusOK, receivedMessages)
 }
 
 func DeleteReceivedMessage(c *gin.Context) {

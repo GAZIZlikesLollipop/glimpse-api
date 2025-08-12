@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -40,11 +41,12 @@ func main() {
 	if err != nil {
 		log.Fatalln("Ошибка поулчения домашней диреткории: ", err)
 	}
-	absolutePath := filepath.Join(homeDir, "glimpse-media")
+	absolutePath := filepath.Join(homeDir, "glimpse")
 	if err := os.MkdirAll(absolutePath, 0755); err != nil {
 		log.Fatalln("Ошибка создания диреткории: ", err)
 	}
-	r.Static("/glimpse-media", absolutePath)
+	utils.TcpCns = make(map[string]*websocket.Conn)
+	r.Static("/media", filepath.Join("media", absolutePath))
 	protected := r.Group("/api")
 	protected.Use(utils.AuthMiddleWare())
 	{
@@ -52,12 +54,10 @@ func main() {
 		protected.DELETE("/users", handlers.DeleteUser)
 		protected.PATCH("/users", handlers.UpdateUser)
 
-		protected.GET("/messages/sent", handlers.GetSentMessages)
 		protected.POST("/messages/sent/:receiverId", handlers.AddSentMessage)
 		protected.DELETE("/messages/sent/:id", handlers.DeleteSentMessage)
 		protected.PATCH("/messages/sent/:id", handlers.UpdateSentMessage)
 
-		protected.GET("/messages/received", handlers.GetReceivedMessages)
 		protected.DELETE("/messages/received/:id", handlers.DeleteReceivedMessage)
 
 		protected.GET("/friends/:id", handlers.AddFriend)
@@ -67,6 +67,10 @@ func main() {
 	}
 	r.POST("/signUp", handlers.SignUp)
 	r.POST("/signIn", handlers.SignIn)
+	// if err := r.Run("0.0.0.0:8080"); err != nil {
+	// 	log.Fatalln("Ошибка запуска сервера: ", err)
+	// 	return
+	// }
 	if err := r.RunTLS("0.0.0.0:8080", "server.crt", "server.key"); err != nil {
 		log.Fatalln("Ошибка запуска сервера: ", err)
 		return

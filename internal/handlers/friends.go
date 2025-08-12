@@ -33,7 +33,7 @@ func AddFriend(c *gin.Context) {
 	}
 	var friend internal.User
 	friendId := c.Param("id")
-	if err := utils.Db.Preload("Firends").First(&friend, friendId).Error; err != nil {
+	if err := utils.Db.Preload("Friends").First(&friend, friendId).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользовaтеля"})
 		return
@@ -70,7 +70,7 @@ func DeleteFriend(c *gin.Context) {
 	}
 	var friend internal.User
 	friendId := c.Param("id")
-	if err := utils.Db.Preload("Firends").First(&friend, friendId).Error; err != nil {
+	if err := utils.Db.Preload("Friends").First(&friend, friendId).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользовaтеля"})
 		return

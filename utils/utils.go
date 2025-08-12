@@ -19,10 +19,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"gorm.io/gorm"
 )
 
 var Db *gorm.DB
+
+var TcpCns map[string]*websocket.Conn
 
 type Claims struct {
 	UserId    int64     `json:"user_id"`
@@ -137,7 +140,7 @@ func SaveAvatarFile(
 		log.Println("Ошибка поулчения домашней диреткории: ", err)
 		return "", err
 	}
-	absolutePath := filepath.Join(homeDir, "glimpse-media")
+	absolutePath := filepath.Join(homeDir, "glimpse", "media")
 	if err := os.MkdirAll(absolutePath, 0755); err != nil {
 		log.Println("Ошибка создания диреткории: ", err)
 		return "", err
@@ -178,7 +181,7 @@ func SaveAvatarFile(
 		}
 	}
 
-	return fmt.Sprintf("https://%s:8080/glimpse-media/%s", addr, fileName), nil
+	return fmt.Sprintf("https://%s:8080/media/%s", addr, fileName), nil
 }
 
 func AuthMiddleWare() gin.HandlerFunc {
