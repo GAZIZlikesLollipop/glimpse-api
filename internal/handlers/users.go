@@ -35,7 +35,7 @@ func GetUser(c *gin.Context) {
 
 	var user internal.User
 
-	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&user, userId).Error; err != nil {
+	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends.Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользовтеля: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получеения пользователя"})
 		return
@@ -144,7 +144,6 @@ func SignIn(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка генрации токена"})
 			return
 		}
-		// c.JSON(http.StatusOK, gin.H{"code": http.StatusOK, "message": "Вы успешно вошли в свою учетную запись", "token": token})
 		c.JSON(http.StatusOK, token)
 	} else {
 		c.JSON(http.StatusConflict, gin.H{"error": "Вы ввели неверный пароль"})
@@ -286,7 +285,7 @@ func UpdateUser(c *gin.Context) {
 	avatarFile, _ := c.FormFile("avatar")
 	if avatarFile != nil {
 		var err error
-		if user.Avatar != "" {
+		if strings.TrimSpace(user.Avatar) != "" {
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				log.Fatalln("Ошибка поулчения домашней диреткории: ", err)
@@ -321,7 +320,7 @@ func UpdateUser(c *gin.Context) {
 
 	user.Id = userId
 
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, gin.H{"message": "Успешное обновление пользователя"})
 }
 
 func WebSocket(c *gin.Context) {
@@ -352,7 +351,7 @@ func WebSocket(c *gin.Context) {
 
 	var user internal.User
 
-	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&user, userId).Error; err != nil { // 	log.Println("Ошибка получения пользовтеля: ", err)
+	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends.Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
 		return
@@ -370,7 +369,7 @@ func WebSocket(c *gin.Context) {
 			break
 		}
 
-		if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&user, userId).Error; err != nil {
+		if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends.Friends").First(&user, userId).Error; err != nil {
 			log.Println("Ошибка получения пользовтеля: ", err)
 			cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
 			return
@@ -385,7 +384,7 @@ func WebSocket(c *gin.Context) {
 				for k, v := range utils.TcpCns {
 					if o.Name == k {
 						var friend internal.User
-						if err := utils.Db.Where("name = ?", k).Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&friend).Error; err != nil {
+						if err := utils.Db.Where("name = ?", k).Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends.Friends").First(&friend).Error; err != nil {
 							log.Println("Ошибка получения пользовтеля: ", err)
 							cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
 							return

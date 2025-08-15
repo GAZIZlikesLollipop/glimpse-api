@@ -46,7 +46,7 @@ func main() {
 		log.Fatalln("Ошибка создания диреткории: ", err)
 	}
 	utils.TcpCns = make(map[string]*websocket.Conn)
-	r.Static("/media", filepath.Join("media", absolutePath))
+	r.Static("/media", filepath.Join(absolutePath, "media"))
 	protected := r.Group("/api")
 	protected.Use(utils.AuthMiddleWare())
 	{
@@ -65,6 +65,7 @@ func main() {
 
 		protected.GET("/ws", handlers.WebSocket)
 	}
+	r.GET("/friends/:id", handlers.GetFriends)
 	r.POST("/signUp", handlers.SignUp)
 	r.POST("/signIn", handlers.SignIn)
 	// if err := r.Run("0.0.0.0:8080"); err != nil {

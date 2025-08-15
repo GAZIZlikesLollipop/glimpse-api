@@ -9,6 +9,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func GetFriends(c *gin.Context) {
+	id := c.Param("id")
+	var friends []internal.User
+	if err := utils.Db.Where("id = ?", id).Preload("Friends").Find(&friends).Error; err != nil {
+		log.Println("Ошибка получения друзей: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения друзей"})
+		return
+	}
+	c.JSON(http.StatusOK, friends)
+}
+
 func AddFriend(c *gin.Context) {
 	rawUserId, exists := c.Get("userId")
 	if !exists {
@@ -25,12 +36,12 @@ func AddFriend(c *gin.Context) {
 	}
 
 	var user internal.User
-
-	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&user, userId).Error; err != nil {
+	if err := utils.Db.Preload("Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользовтеля: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получеения пользователя"})
 		return
 	}
+
 	var friend internal.User
 	friendId := c.Param("id")
 	if err := utils.Db.Preload("Friends").First(&friend, friendId).Error; err != nil {
@@ -38,11 +49,18 @@ func AddFriend(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользовaтеля"})
 		return
 	}
+
 	if err := utils.Db.Model(&user).Association("Friends").Append(&friend); err != nil {
 		log.Println("Ошибка добавления друга: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка добавления друга"})
 		return
 	}
+	if err := utils.Db.Model(&friend).Association("Friends").Append(&user); err != nil {
+		log.Println("Ошибка добавления друга: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка добавления друга"})
+		return
+	}
+
 	c.JSON(http.StatusCreated, gin.H{"message": "Друг успшено добавлен"})
 }
 
@@ -63,7 +81,7 @@ func DeleteFriend(c *gin.Context) {
 
 	var user internal.User
 
-	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&user, userId).Error; err != nil {
+	if err := utils.Db.Preload("Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользовтеля: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получеения пользователя"})
 		return
@@ -75,7 +93,12 @@ func DeleteFriend(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользовaтеля"})
 		return
 	}
-	if err := utils.Db.Model(&user).Association("Freinds").Delete(&friend); err != nil {
+	if err := utils.Db.Model(&user).Association("Friends").Delete(&friend); err != nil {
+		log.Println("Ошибка удаления друга: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления друга"})
+		return
+	}
+	if err := utils.Db.Model(&friend).Association("Friends").Delete(&user); err != nil {
 		log.Println("Ошибка удаления друга: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления друга"})
 		return
