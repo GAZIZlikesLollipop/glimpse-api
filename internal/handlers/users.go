@@ -193,7 +193,7 @@ func DeleteUser(c *gin.Context) {
 		}
 	}
 
-	if err := utils.Db.Model(&user).Association("Friends").Clear(); err != nil {
+	if err := utils.Db.Exec("DELETE FROM user_friends WHERE user_id = ? OR friend_id = ?", userId, userId).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления друзей"})
 		log.Println("Ошибка удаления друзей: ", err)
 		return
