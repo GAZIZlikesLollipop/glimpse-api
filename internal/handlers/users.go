@@ -320,7 +320,29 @@ func UpdateUser(c *gin.Context) {
 
 	user.Id = userId
 
-	c.JSON(http.StatusOK, gin.H{"message": "Успешное обновление пользователя"})
+	c.JSON(http.StatusOK, user)
+}
+
+func GetUsers(c *gin.Context) {
+	var (
+		resps []internal.Users
+		users []internal.User
+	)
+	if err := utils.Db.Find(&users).Error; err != nil {
+		log.Println("Ошибка получения пользователей: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользователей"})
+		return
+	}
+	for i := 0; len(users) > i; i++ {
+		var resp internal.Users
+		resp.Id = users[i].Id
+		resp.Avatar = users[i].Avatar
+		resp.Name = users[i].Name
+		resp.Latitude = users[i].Latitude
+		resp.Longitude = users[i].Longitude
+		resps = append(resps, resp)
+	}
+	c.JSON(http.StatusOK, resps)
 }
 
 func WebSocket(c *gin.Context) {

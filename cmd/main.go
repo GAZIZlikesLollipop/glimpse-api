@@ -68,6 +68,7 @@ func main() {
 	r.GET("/friends/:id", handlers.GetFriends)
 	r.POST("/signUp", handlers.SignUp)
 	r.POST("/signIn", handlers.SignIn)
+	r.GET("/users", handlers.GetUsers)
 	// if err := r.Run("0.0.0.0:8080"); err != nil {
 	// 	log.Fatalln("Ошибка запуска сервера: ", err)
 	// 	return

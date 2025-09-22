@@ -34,3 +34,11 @@ type AuthRequest struct {
 	UserName string `json:"user_name"`
 	Password string `json:"password"`
 }
+
+type Users struct {
+	Id        int64   `json:"id"`
+	Name      string  `json:"name"`
+	Avatar    string  `json:"avatar"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+}
