@@ -111,7 +111,7 @@ func SignUp(c *gin.Context) {
 				return
 			}
 		}
-		user.LastOnline = time.Now()
+		user.LastOnline = time.Now().UnixMilli()
 		if err := utils.Db.Create(&user).Error; err != nil {
 			log.Println("Ошибка сохранения данных в базу данных: ", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения данных в базу данных"})
@@ -139,7 +139,7 @@ func SignIn(c *gin.Context) {
 	}
 
 	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(request.Password)) == nil {
-		token, err := utils.GenerateJWTToken(user.Id, user.Name, user.CreatedAt)
+		token, err := utils.GenerateJWTToken(user.Id, user.Name, time.UnixMilli(user.CreatedAt))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка генрации токена"})
 			return
@@ -310,7 +310,7 @@ func UpdateUser(c *gin.Context) {
 		}
 	}
 
-	user.LastOnline = time.Now()
+	user.LastOnline = time.Now().UnixMilli()
 
 	if err := utils.Db.Save(&user).Error; err != nil {
 		log.Println("Ошибка обновления учетной записи: ", err)

@@ -59,7 +59,6 @@ func main() {
 		protected.PATCH("/messages/sent/:id", handlers.UpdateSentMessage)
 
 		protected.DELETE("/messages/received/:id", handlers.DeleteReceivedMessage)
-
 		protected.GET("/friends/:id", handlers.AddFriend)
 		protected.DELETE("/friends/:id", handlers.DeleteFriend)
 
