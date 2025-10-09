@@ -3,7 +3,6 @@ package internal
 type Message struct {
 	Id         int64   `json:"id" gorm:"primaryKey"`
 	Content    string  `json:"content"`
-	IsChecked  bool    `json:"isChecked"`
 	SenderId   *uint64 `json:"senderId"`
 	ReceiverId *uint64 `json:"receiverId"`
 	CreatedAt  int64   `json:"created_at" gorm:"column:created_at;type:bigint;autoCreateTime:milli"`

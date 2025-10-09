@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func AddSentMessage(c *gin.Context) {
+func AddMessage(c *gin.Context) {
 	rawReceiverId := c.Param("receiverId")
 	receiverId, err := strconv.ParseInt(rawReceiverId, 10, 64)
 	if err != nil {
@@ -49,35 +49,29 @@ func AddSentMessage(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Вы успшено добавили сообщение"})
+	var messages []internal.Message
+	if err := utils.Db.Find(&messages).Error; err != nil {
+		log.Println("Ошибка получения сообщений: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения сообщений"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, messages[len(messages)-1])
 }
 
-func DeleteSentMessage(c *gin.Context) {
+func DeleteMessage(c *gin.Context) {
 	id := c.Param("id")
-	rawUserId, exists := c.Get("userId")
-	if !exists {
-		log.Println("Ошибка получения данных с токена")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения данных с токена"})
-		return
-	}
 
-	userId, ok := rawUserId.(int64)
-	if !ok {
-		log.Println("Ошибка преобрзаования айди")
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
-		return
-	}
-
-	if err := utils.Db.Where("sender_id = ? AND id = ?", userId, id).Delete(&internal.Message{}).Error; err != nil {
-		log.Println("Ошибка Получения сообщения: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка Получения сообщения"})
+	if err := utils.Db.Delete(&internal.Message{}, id).Error; err != nil {
+		log.Println("Ошибка Удаления сообщения: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка Удаления сообщения"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Успшеное удаление сообщения"})
 }
 
-func UpdateSentMessage(c *gin.Context) {
+func UpdateMessage(c *gin.Context) {
 	var updateSentMessage, sentMessage internal.Message
 	id := c.Param("id")
 
@@ -97,10 +91,6 @@ func UpdateSentMessage(c *gin.Context) {
 		sentMessage.Content = updateSentMessage.Content
 	}
 
-	if updateSentMessage.IsChecked != sentMessage.IsChecked {
-		sentMessage.IsChecked = updateSentMessage.IsChecked
-	}
-
 	if err := utils.Db.Save(&sentMessage).Error; err != nil {
 		log.Println("Ошибка обнволения сообщения: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обновления сообщения"})
@@ -108,28 +98,4 @@ func UpdateSentMessage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Успешное обновление сообщения"})
-}
-
-func DeleteReceivedMessage(c *gin.Context) {
-	rawUserId, exists := c.Get("userId")
-	if !exists {
-		log.Println("Ошибка получения данных с токена")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения данных с токена"})
-		return
-	}
-
-	userId, ok := rawUserId.(int64)
-	if !ok {
-		log.Println("Ошибка преобрзаования айди")
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
-		return
-	}
-
-	id := c.Param("id")
-	if err := utils.Db.Where("receiver_id = ? AND id = ?", userId, id).Delete(&internal.Message{}).Error; err != nil {
-		log.Println("Ошибка удаления сообщения: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления сообщения"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "Успшеное удаление сообщения"})
 }

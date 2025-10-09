@@ -54,11 +54,10 @@ func main() {
 		protected.DELETE("/users", handlers.DeleteUser)
 		protected.PATCH("/users", handlers.UpdateUser)
 
-		protected.POST("/messages/sent/:receiverId", handlers.AddSentMessage)
-		protected.DELETE("/messages/sent/:id", handlers.DeleteSentMessage)
-		protected.PATCH("/messages/sent/:id", handlers.UpdateSentMessage)
+		protected.POST("/messages/:receiverId", handlers.AddMessage)
+		protected.DELETE("/messages/:id", handlers.DeleteMessage)
+		protected.PATCH("/messages/:id", handlers.UpdateMessage)
 
-		protected.DELETE("/messages/received/:id", handlers.DeleteReceivedMessage)
 		protected.GET("/friends/:id", handlers.AddFriend)
 		protected.DELETE("/friends/:id", handlers.DeleteFriend)
 
