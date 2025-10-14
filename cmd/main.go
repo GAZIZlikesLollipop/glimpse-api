@@ -27,7 +27,8 @@ func main() {
 	}
 	var err error
 	r := gin.Default()
-	dsn := "host=localhost user=postgres dbname=glimpsedb port=5432 sslmode=disable password=1234"
+	// dsn := "host=localhost user=postgres dbname=glimpsedb port=5432 sslmode=disable password=12345678"
+	dsn := "postgres://postgres:12345678@localhost:5432/glimpsedb?sslmode=disable"
 	utils.Db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalln("Ошибка инциализации базы данных: ", err)
