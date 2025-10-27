@@ -237,7 +237,7 @@ func UpdateUser(c *gin.Context) {
 	}
 
 	var user internal.User
-	if err := utils.Db.First(&user, userId).Error; err != nil {
+	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends.Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользоватей"})
 		return
@@ -310,7 +310,9 @@ func UpdateUser(c *gin.Context) {
 		}
 	}
 
-	user.LastOnline = time.Now().UnixMilli()
+	if d := c.PostForm("online"); d != "" {
+		user.LastOnline = time.Now().UnixMilli()
+	}
 
 	if err := utils.Db.Save(&user).Error; err != nil {
 		log.Println("Ошибка обновления учетной записи: ", err)
@@ -417,11 +419,7 @@ func WebSocket(c *gin.Context) {
 							cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка кодирования json"))
 							return
 						}
-						if err := v.WriteMessage(websocket.TextMessage, friendData); err != nil {
-							log.Println("Ошибка отправки json: ", err)
-							cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка отпрваки json"))
-							return
-						}
+						v.WriteMessage(websocket.TextMessage, friendData)
 					}
 				}
 			}
@@ -431,7 +429,6 @@ func WebSocket(c *gin.Context) {
 				return
 			}
 		}
-
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "WebSocket соединение успешно разорвано!"})

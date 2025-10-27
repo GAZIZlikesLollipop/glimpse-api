@@ -19,8 +19,8 @@ type User struct {
 	Longitude        float64   `json:"longitude"`
 	LastOnline       int64     `json:"lastOnline"`
 	Friends          []User    `json:"friends" gorm:"many2many:user_friends;"`
-	SentMessages     []Message `json:"sentMessages" gorm:"foreignKey:SenderId"`
-	ReceivedMessages []Message `json:"receivedMessages" gorm:"foreignKey:ReceiverId"`
+	SentMessages     []Message `json:"sentMessages" gorm:"foreignKey:SenderId;constraint:OnDelete:CASCADE"`
+	ReceivedMessages []Message `json:"receivedMessages" gorm:"foreignKey:ReceiverId;constraint:OnDelte:CASCADE"`
 	CreatedAt        int64     `json:"created_at" gorm:"column:created_at;type:bigint;autoCreateTime:milli"`
 	UpdatedAt        int64     `json:"updated_at" gorm:"column:updated_at;type:bigint;autoUpdateTime:milli"`
 }
