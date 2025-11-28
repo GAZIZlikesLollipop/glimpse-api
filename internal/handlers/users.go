@@ -4,11 +4,13 @@ import (
 	"api/internal"
 	"api/utils"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -32,10 +34,9 @@ func GetUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
 		return
 	}
-
 	var user internal.User
 
-	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends.Friends").First(&user, userId).Error; err != nil {
+	if err := utils.UserDb.Preload("Friends.Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользовтеля: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получеения пользователя"})
 		return
@@ -56,7 +57,7 @@ func SignUp(c *gin.Context) {
 		user.Name = name
 	}
 	var count int64
-	if err := utils.Db.Model(&internal.User{}).Where("name = ?", user.Name).Count(&count).Error; err != nil {
+	if err := utils.UserDb.Model(&internal.User{}).Where("name = ?", user.Name).Count(&count).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользователя"})
 		return
@@ -103,16 +104,32 @@ func SignUp(c *gin.Context) {
 		}
 		avatarFile, _ := c.FormFile("avatar")
 		if avatarFile != nil {
-			var err error
-			user.Avatar, err = utils.SaveAvatarFile(c, user.Name)
-			if err != nil {
-				log.Println("Ошибка сохранения файла: ", err)
+			user.Avatar = fmt.Sprintf("https://%s/media/%s%s", os.Getenv("SERVER_IP"), user.Name, strings.ToLower(filepath.Ext(avatarFile.Filename)))
+
+			if err := utils.SaveAvatarFile(c, user.Name); err != nil {
+				log.Println("Ошибка сохранения аватарки: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения аватарки"})
+				return
+			}
+
+			req := internal.MediaServiceRequest{
+				AvatarExt: filepath.Ext(avatarFile.Filename),
+				UserName:  user.Name,
+			}
+			if err := addMediaRequest(req); err != nil {
+				log.Println("Ошибка сохранения аватарки: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения аватарки"})
+				return
+			}
+
+			if err := os.Remove(filepath.Join("/app", "glimpse", "media", fmt.Sprintf("%s%s", name, strings.ToLower(filepath.Ext(avatarFile.Filename))))); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
+				log.Println("Ошибка сохранения аватарки: ", err)
 				return
 			}
 		}
 		user.LastOnline = time.Now().UnixMilli()
-		if err := utils.Db.Create(&user).Error; err != nil {
+		if err := utils.UserDb.Create(&user).Error; err != nil {
 			log.Println("Ошибка сохранения данных в базу данных: ", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения данных в базу данных"})
 			return
@@ -132,7 +149,7 @@ func SignIn(c *gin.Context) {
 		return
 	}
 
-	if err := utils.Db.Where("name = ?", request.UserName).First(&user).Error; err != nil {
+	if err := utils.UserDb.Where("name = ?", request.UserName).First(&user).Error; err != nil {
 		log.Println("Пользователя с таким именем не существует: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Пользователя с таким именем не существует"})
 		return
@@ -142,6 +159,7 @@ func SignIn(c *gin.Context) {
 		token, err := utils.GenerateJWTToken(user.Id, user.Name, time.UnixMilli(user.CreatedAt))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка генрации токена"})
+			log.Println("Ошибка генерации токена: ", err)
 			return
 		}
 		c.JSON(http.StatusOK, token)
@@ -164,61 +182,60 @@ func DeleteUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
 		return
 	}
-
 	var user internal.User
 
-	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends").First(&user, userId).Error; err != nil {
+	if err := utils.UserDb.Preload("Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользователя"})
 		return
 	}
 
 	if strings.TrimSpace(user.Avatar) != "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			log.Println("Ошибка поулчения домашней диреткории: ", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пути к домшней директории"})
-			return
-		}
 		fileUrl, err := url.Parse(user.Avatar)
 		if err != nil {
 			log.Println("Ошибка прасинга url: ", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка прасинга url"})
 			return
 		}
-		if err := os.Remove(filepath.Join(homeDir, "glimpse", fileUrl.Path)); err != nil {
-			log.Println("Ошибка удаления файла: ", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления файла"})
+
+		req := internal.MediaServiceRequest{
+			AvatarExt: filepath.Ext(fileUrl.Path),
+			UserName:  user.Name,
+		}
+		if err := deleteMediaRequest(req); err != nil {
+			log.Println("Ошибка отправки запрос на удаления аватарки: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка отправки запрос на удаления аватарки"})
 			return
 		}
 	}
 
-	if err := utils.Db.Exec("DELETE FROM user_friends WHERE user_id = ? OR friend_id = ?", userId, userId).Error; err != nil {
+	if err := utils.UserDb.Exec("DELETE FROM user_friends WHERE user_id = ? OR friend_id = ?", userId, userId).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления друзей"})
 		log.Println("Ошибка удаления друзей: ", err)
 		return
 	}
 
-	if err := utils.Db.Model(&user).Association("SentMessages").Clear(); err != nil {
+	msgReq := internal.MsgServiceRequest{UserId: userId}
+	msgs, err := deleteMessagesRequest(msgReq)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления сообщений"})
-		log.Println("Ошибка удаления сообщений: ", err)
 		return
 	}
-
-	if err := utils.Db.Model(&user).Association("ReceivedMessages").Clear(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления сообщений"})
-		log.Println("Ошибка удаления сообщений: ", err)
-		return
+	mesgs := *msgs
+	for _, e := range user.Friends {
+		for i := range mesgs {
+			e.SentMessages = append(e.SentMessages[:slices.Index(e.SentMessages, mesgs[i])], e.SentMessages[slices.Index(e.SentMessages, mesgs[i])+1:]...)
+			e.ReceivedMessages = append(e.ReceivedMessages[:slices.Index(e.ReceivedMessages, mesgs[i])], e.ReceivedMessages[slices.Index(e.ReceivedMessages, mesgs[i])+1:]...)
+		}
 	}
 
-	if err := utils.Db.Delete(&user).Error; err != nil {
+	if err := utils.UserDb.Delete(&user).Error; err != nil {
 		log.Println("Ошибка удаления учетной записи: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления учетной записи"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Ваша учетная запись была успешно удалена"})
-
 }
 
 func UpdateUser(c *gin.Context) {
@@ -235,9 +252,8 @@ func UpdateUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
 		return
 	}
-
 	var user internal.User
-	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends.Friends").First(&user, userId).Error; err != nil {
+	if err := utils.UserDb.Preload("Friends.Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользоватей"})
 		return
@@ -284,29 +300,40 @@ func UpdateUser(c *gin.Context) {
 	}
 	avatarFile, _ := c.FormFile("avatar")
 	if avatarFile != nil {
-		var err error
 		if strings.TrimSpace(user.Avatar) != "" {
-			homeDir, err := os.UserHomeDir()
+			user.Avatar = fmt.Sprintf("https://%s/media/%s%s", os.Getenv("SERVER_IP"), user.Name, strings.ToLower(filepath.Ext(avatarFile.Filename)))
+			fileUrl, err := url.Parse(user.Avatar)
 			if err != nil {
-				log.Fatalln("Ошибка поулчения домашней диреткории: ", err)
-			}
-			urlPath, err := url.Parse(user.Avatar)
-			if err != nil {
-				log.Println("Ошибка полчения урл пути: ", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения урл пути"})
+				log.Println("Ошибка прасинга url: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка прасинга url"})
 				return
 			}
-			if err := os.Remove(filepath.Join(homeDir, "glimpse", urlPath.Path)); err != nil {
-				log.Println("Ошибка удаления файла: ", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления файла"})
+			req := internal.MediaServiceRequest{
+				AvatarExt: filepath.Ext(fileUrl.Path),
+				UserName:  user.Name,
+			}
+			if err := deleteMediaRequest(req); err != nil {
+				log.Println("Ошибка отправки запрос на удаления аватарки: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка отправки запрос на удаления аватарки"})
 				return
 			}
-		}
-		user.Avatar, err = utils.SaveAvatarFile(c, user.Name)
-		if err != nil {
-			log.Println("Ошибка сохранения файла: ", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
-			return
+
+			if err := utils.SaveAvatarFile(c, user.Name); err != nil {
+				log.Println("Ошибка сохранения аватарки: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения аватарки"})
+				return
+			}
+			if err := addMediaRequest(req); err != nil {
+				log.Println("Ошибка сохранения аватарки: ", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения аватарки"})
+				return
+			}
+
+			if err := os.Remove(filepath.Join("/app", "glimpse", "media", fmt.Sprintf("%s%s", user.Name, strings.ToLower(filepath.Ext(avatarFile.Filename))))); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
+				log.Println("Ошибка сохранения аватарки: ", err)
+				return
+			}
 		}
 	}
 
@@ -314,7 +341,7 @@ func UpdateUser(c *gin.Context) {
 		user.LastOnline = time.Now().UnixMilli()
 	}
 
-	if err := utils.Db.Save(&user).Error; err != nil {
+	if err := utils.UserDb.Save(&user).Error; err != nil {
 		log.Println("Ошибка обновления учетной записи: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обновления учетной записи"})
 		return
@@ -330,7 +357,7 @@ func GetUsers(c *gin.Context) {
 		resps []internal.Users
 		users []internal.User
 	)
-	if err := utils.Db.Find(&users).Error; err != nil {
+	if err := utils.UserDb.Find(&users).Error; err != nil {
 		log.Println("Ошибка получения пользователей: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения пользователей"})
 		return
@@ -375,7 +402,7 @@ func WebSocket(c *gin.Context) {
 
 	var user internal.User
 
-	if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends.Friends").First(&user, userId).Error; err != nil {
+	if err := utils.UserDb.Preload("Friends.Friends").First(&user, userId).Error; err != nil {
 		log.Println("Ошибка получения пользователя: ", err)
 		cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
 		return
@@ -393,7 +420,7 @@ func WebSocket(c *gin.Context) {
 			break
 		}
 
-		if err := utils.Db.Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends.Friends").First(&user, userId).Error; err != nil {
+		if err := utils.UserDb.Preload("Friends.Friends").First(&user, userId).Error; err != nil {
 			log.Println("Ошибка получения пользовтеля: ", err)
 			cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
 			return
@@ -408,7 +435,7 @@ func WebSocket(c *gin.Context) {
 				for k, v := range utils.TcpCns {
 					if o.Name == k {
 						var friend internal.User
-						if err := utils.Db.Where("name = ?", k).Preload("SentMessages").Preload("ReceivedMessages").Preload("Friends.Friends").First(&friend).Error; err != nil {
+						if err := utils.UserDb.Where("name = ?", k).Preload("Friends.Friends").First(&friend).Error; err != nil {
 							log.Println("Ошибка получения пользовтеля: ", err)
 							cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
 							return

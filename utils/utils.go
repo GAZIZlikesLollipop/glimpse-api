@@ -2,13 +2,10 @@ package utils
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,46 +15,45 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"gorm.io/gorm"
 )
 
-var Db *gorm.DB
+var UserDb *gorm.DB
+var MsgDb *gorm.DB
 
 var TcpCns map[string]*websocket.Conn
+
+func SaveAvatarFile(
+	c *gin.Context,
+	name string,
+) error {
+	absolutePath := filepath.Join("/app", "glimpse", "media")
+	if err := os.MkdirAll(absolutePath, 0755); err != nil {
+		log.Println("Ошибка создания диреткории: ", err)
+		return err
+	}
+	file, err := c.FormFile("avatar")
+	if err != nil {
+		log.Println("Ошибка обработки файла: ", err)
+		return err
+	}
+
+	fileName := fmt.Sprintf("%s%s", name, strings.ToLower(filepath.Ext(file.Filename)))
+
+	if err := c.SaveUploadedFile(file, filepath.Join(absolutePath, fileName)); err != nil {
+		log.Println("Ошибка сохранения файла: ", err)
+		return err
+	}
+
+	return nil
+}
 
 type Claims struct {
 	UserId    int64     `json:"user_id"`
 	UserName  string    `json:"userName"`
 	CreatedAt time.Time `json:"crated_at"`
 	jwt.RegisteredClaims
-}
-
-func GenerateJWTSecretKey() error {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		log.Println("Ошибка генрации приватного ключа: ", err)
-		return err
-	}
-
-	keyDER, err := x509.MarshalECPrivateKey(privateKey)
-	if err != nil {
-		log.Println("Ошибка преобраовния private key: ", err)
-		return err
-	}
-
-	keyPM := pem.EncodeToMemory(&pem.Block{
-		Type:  "EC PRIVATE KEY",
-		Bytes: keyDER,
-	})
-
-	if err := os.Setenv("JWT_SECRET_KEY", string(keyPM)); err != nil {
-		log.Println("Ошибка сохранения сохренния привтного клюа в премнную: ", err)
-		return err
-	}
-
-	return nil
 }
 
 func DecodeJWTSecretKey() (*ecdsa.PrivateKey, error) {
@@ -129,59 +125,6 @@ func ValidateJWTToken(tokenString string) (*Claims, error) {
 	}
 
 	return &claims, nil
-}
-
-func SaveAvatarFile(
-	c *gin.Context,
-	name string,
-) (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Println("Ошибка поулчения домашней диреткории: ", err)
-		return "", err
-	}
-	absolutePath := filepath.Join(homeDir, "glimpse", "media")
-	if err := os.MkdirAll(absolutePath, 0755); err != nil {
-		log.Println("Ошибка создания диреткории: ", err)
-		return "", err
-	}
-	file, err := c.FormFile("avatar")
-	if err != nil {
-		log.Println("Ошибка обработки файла: ", err)
-		return "", err
-	}
-
-	fileName := fmt.Sprintf("%s-%s%s", name, uuid.New(), strings.ToLower(filepath.Ext(file.Filename)))
-
-	if err := c.SaveUploadedFile(file, filepath.Join(absolutePath, fileName)); err != nil {
-		log.Println("Ошибка сохранения файла: ", err)
-		return "", err
-	}
-
-	var addr string
-
-	ipaces, err := net.InterfaceAddrs()
-	if err != nil {
-		log.Println("Ошибка поулчения интерфейсов: ", err)
-		return "", err
-	}
-
-	for _, a := range ipaces {
-		if ipnet, ok := a.(*net.IPNet); ok {
-			if !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
-				ipStr := ipnet.IP.String()
-				isPrivate := strings.HasPrefix(ipStr, "192.168.") ||
-					strings.HasPrefix(ipStr, "10.") ||
-					(strings.HasPrefix(ipStr, "172.") && len(ipStr) >= 7 && ipStr[4] >= '1' && ipStr[4] <= '3' && ipStr[5] == '.')
-				if isPrivate {
-					addr = ipnet.IP.String()
-					break
-				}
-			}
-		}
-	}
-
-	return fmt.Sprintf("https://%s:8080/media/%s", addr, fileName), nil
 }
 
 func AuthMiddleWare() gin.HandlerFunc {
