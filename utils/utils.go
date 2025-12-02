@@ -15,14 +15,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/gorilla/websocket"
 	"gorm.io/gorm"
 )
 
 var UserDb *gorm.DB
 var MsgDb *gorm.DB
-
-var TcpCns map[string]*websocket.Conn
 
 func SaveAvatarFile(
 	c *gin.Context,
@@ -40,6 +37,14 @@ func SaveAvatarFile(
 	}
 
 	fileName := fmt.Sprintf("%s%s", name, strings.ToLower(filepath.Ext(file.Filename)))
+
+	_, err = os.Stat(filepath.Join(absolutePath, fileName))
+	if err == nil {
+		if err := os.Remove(filepath.Join(absolutePath, fileName)); err != nil {
+			log.Println("Ошибка удаления файла: ", err)
+			return err
+		}
+	}
 
 	if err := c.SaveUploadedFile(file, filepath.Join(absolutePath, fileName)); err != nil {
 		log.Println("Ошибка сохранения файла: ", err)

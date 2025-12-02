@@ -3,20 +3,17 @@ package handlers
 import (
 	"api/internal"
 	"api/utils"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -34,6 +31,19 @@ func GetUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
 		return
 	}
+	var user internal.User
+
+	if err := utils.UserDb.Preload("Friends.Friends").First(&user, userId).Error; err != nil {
+		log.Println("Ошибка получения пользовтеля: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получеения пользователя"})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+func GetUserById(c *gin.Context) {
+	userId := c.Param("id")
 	var user internal.User
 
 	if err := utils.UserDb.Preload("Friends.Friends").First(&user, userId).Error; err != nil {
@@ -216,17 +226,10 @@ func DeleteUser(c *gin.Context) {
 	}
 
 	msgReq := internal.MsgServiceRequest{UserId: userId}
-	msgs, err := deleteMessagesRequest(msgReq)
+	err := deleteMessagesRequest(msgReq)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления сообщений"})
 		return
-	}
-	mesgs := *msgs
-	for _, e := range user.Friends {
-		for i := range mesgs {
-			e.SentMessages = append(e.SentMessages[:slices.Index(e.SentMessages, mesgs[i])], e.SentMessages[slices.Index(e.SentMessages, mesgs[i])+1:]...)
-			e.ReceivedMessages = append(e.ReceivedMessages[:slices.Index(e.ReceivedMessages, mesgs[i])], e.ReceivedMessages[slices.Index(e.ReceivedMessages, mesgs[i])+1:]...)
-		}
 	}
 
 	if err := utils.UserDb.Delete(&user).Error; err != nil {
@@ -300,44 +303,42 @@ func UpdateUser(c *gin.Context) {
 	}
 	avatarFile, _ := c.FormFile("avatar")
 	if avatarFile != nil {
-		if strings.TrimSpace(user.Avatar) != "" {
-			user.Avatar = fmt.Sprintf("https://%s/media/%s%s", os.Getenv("SERVER_IP"), user.Name, strings.ToLower(filepath.Ext(avatarFile.Filename)))
-			fileUrl, err := url.Parse(user.Avatar)
-			if err != nil {
-				log.Println("Ошибка прасинга url: ", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка прасинга url"})
-				return
-			}
-			req := internal.MediaServiceRequest{
-				AvatarExt: filepath.Ext(fileUrl.Path),
-				UserName:  user.Name,
-			}
-			if err := deleteMediaRequest(req); err != nil {
-				log.Println("Ошибка отправки запрос на удаления аватарки: ", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка отправки запрос на удаления аватарки"})
-				return
-			}
+		user.Avatar = fmt.Sprintf("https://%s/media/%s%s", os.Getenv("SERVER_IP"), user.Name, strings.ToLower(filepath.Ext(avatarFile.Filename)))
+		fileUrl, err := url.Parse(user.Avatar)
+		if err != nil {
+			log.Println("Ошибка прасинга url: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка прасинга url"})
+			return
+		}
+		if err := os.MkdirAll(filepath.Join("/app", "glimpse", "media"), 0755); err != nil {
+			log.Println("Ошибка создания директории: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории"})
+			return
+		}
+		req := internal.MediaServiceRequest{
+			AvatarExt: filepath.Ext(fileUrl.Path),
+			UserName:  user.Name,
+		}
 
-			if err := utils.SaveAvatarFile(c, user.Name); err != nil {
-				log.Println("Ошибка сохранения аватарки: ", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения аватарки"})
-				return
-			}
-			if err := addMediaRequest(req); err != nil {
-				log.Println("Ошибка сохранения аватарки: ", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения аватарки"})
-				return
-			}
+		if err := utils.SaveAvatarFile(c, user.Name); err != nil {
+			log.Println("Ошибка сохранения аватарки: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения аватарки"})
+			return
+		}
+		if err := addMediaRequest(req); err != nil {
+			log.Println("Ошибка сохранения аватарки: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения аватарки"})
+			return
+		}
 
-			if err := os.Remove(filepath.Join("/app", "glimpse", "media", fmt.Sprintf("%s%s", user.Name, strings.ToLower(filepath.Ext(avatarFile.Filename))))); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
-				log.Println("Ошибка сохранения аватарки: ", err)
-				return
-			}
+		if err := os.Remove(filepath.Join("/app", "glimpse", "media", fmt.Sprintf("%s%s", user.Name, strings.ToLower(filepath.Ext(avatarFile.Filename))))); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
+			log.Println("Ошибка сохранения аватарки: ", err)
+			return
 		}
 	}
 
-	if d := c.PostForm("online"); d != "" {
+	if c.PostForm("online") != "" {
 		user.LastOnline = time.Now().UnixMilli()
 	}
 
@@ -372,91 +373,4 @@ func GetUsers(c *gin.Context) {
 		resps = append(resps, resp)
 	}
 	c.JSON(http.StatusOK, resps)
-}
-
-func WebSocket(c *gin.Context) {
-	rawUserId, exists := c.Get("userId")
-	if !exists {
-		log.Println("Ошибка получения данных с токена")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения данных с токена"})
-		return
-	}
-
-	userId, ok := rawUserId.(int64)
-	if !ok {
-		log.Println("Ошибка преобрзаования айди")
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": "Ошибка преобразования айди"})
-		return
-	}
-	upgrader := websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-	}
-	cnn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		log.Println("Ошибка создания webSocket соединения: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания websocket соединения"})
-		return
-	}
-	defer cnn.Close()
-
-	var user internal.User
-
-	if err := utils.UserDb.Preload("Friends.Friends").First(&user, userId).Error; err != nil {
-		log.Println("Ошибка получения пользователя: ", err)
-		cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
-		return
-	}
-
-	utils.TcpCns[user.Name] = cnn
-
-	cnn.WriteMessage(websocket.TextMessage, []byte("WebSocket соединение успешно создано"))
-
-	for {
-		_, _, err := cnn.ReadMessage()
-		if err != nil {
-			log.Println("Ошибка получения сообщения: ", err)
-			cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получения сообщения"))
-			break
-		}
-
-		if err := utils.UserDb.Preload("Friends.Friends").First(&user, userId).Error; err != nil {
-			log.Println("Ошибка получения пользовтеля: ", err)
-			cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
-			return
-		}
-
-		if data, err := json.Marshal(&user); err != nil {
-			log.Println("Ошибка преобразования типов: ", err)
-			cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка преобразования типов"))
-			break
-		} else {
-			for _, o := range user.Friends {
-				for k, v := range utils.TcpCns {
-					if o.Name == k {
-						var friend internal.User
-						if err := utils.UserDb.Where("name = ?", k).Preload("Friends.Friends").First(&friend).Error; err != nil {
-							log.Println("Ошибка получения пользовтеля: ", err)
-							cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка получеения пользователя"))
-							return
-						}
-						friendData, err := json.Marshal(friend)
-						if err != nil {
-							log.Println("Ошибка кодирования json: ", err)
-							cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка кодирования json"))
-							return
-						}
-						v.WriteMessage(websocket.TextMessage, friendData)
-					}
-				}
-			}
-			if err := cnn.WriteMessage(websocket.TextMessage, data); err != nil {
-				log.Println("Ошибка отправки json: ", err)
-				cnn.WriteMessage(websocket.TextMessage, []byte("Ошибка отпрваки json"))
-				return
-			}
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "WebSocket соединение успешно разорвано!"})
 }

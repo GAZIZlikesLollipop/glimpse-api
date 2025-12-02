@@ -38,16 +38,14 @@ func main() {
 	{
 		protected.GET("/users", handlers.GetUser)
 		protected.DELETE("/users", handlers.DeleteUser)
-		protected.PATCH("/users", handlers.UpdateUser)
+		protected.POST("/users", handlers.UpdateUser)
 
-		protected.GET("/friends/app/:id", handlers.AddFriend)
+		protected.GET("/friends/:id", handlers.AddFriend)
 		protected.DELETE("/friends/:id", handlers.DeleteFriend)
 	}
 
-	r.POST("/users/service/add", handlers.AddUserMessageService)
-	r.POST("/users/service/delete", handlers.DeleteUserMessageService)
-
 	r.GET("/users/friends/:id", handlers.GetFriends)
+	r.GET("/users/:id", handlers.GetUserById)
 	r.GET("/users", handlers.GetUsers)
 
 	if err := r.Run("0.0.0.0:8080"); err != nil {

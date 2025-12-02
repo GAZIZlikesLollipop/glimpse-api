@@ -1,7 +1,5 @@
 package internal
 
-import "github.com/lib/pq"
-
 type Message struct {
 	Id         int64  `json:"id" gorm:"primaryKey"`
 	Content    string `json:"content"`
@@ -12,19 +10,22 @@ type Message struct {
 }
 
 type User struct {
-	Id               int64         `json:"id" gorm:"primaryKey"`
-	Name             string        `json:"name"`
-	Password         string        `json:"password"`
-	Avatar           string        `json:"avatar"`
-	Bio              string        `json:"bio"`
-	Latitude         float64       `json:"latitude"`
-	Longitude        float64       `json:"longitude"`
-	LastOnline       int64         `json:"lastOnline"`
-	Friends          []User        `json:"friends" gorm:"many2many:user_friends;"`
-	SentMessages     pq.Int64Array `json:"sentMessages" gorm:"type:bigint[]"`
-	ReceivedMessages pq.Int64Array `json:"receivedMessages" gorm:"type:bigint[]"`
-	CreatedAt        int64         `json:"created_at" gorm:"column:created_at;type:bigint;autoCreateTime:milli"`
-	UpdatedAt        int64         `json:"updated_at" gorm:"column:updated_at;type:bigint;autoUpdateTime:milli"`
+	Id         int64   `json:"id" gorm:"primaryKey"`
+	Name       string  `json:"name"`
+	Password   string  `json:"password"`
+	Avatar     string  `json:"avatar"`
+	Bio        string  `json:"bio"`
+	Latitude   float64 `json:"latitude"`
+	Longitude  float64 `json:"longitude"`
+	LastOnline int64   `json:"lastOnline"`
+	Friends    []User  `json:"friends" gorm:"many2many:user_friends;"`
+	CreatedAt  int64   `json:"created_at" gorm:"column:created_at;type:bigint;autoCreateTime:milli"`
+	UpdatedAt  int64   `json:"updated_at" gorm:"column:updated_at;type:bigint;autoUpdateTime:milli"`
+}
+
+type WebSocketResponse struct {
+	User     User      `json:"user"`
+	Messages []Message `json:"messages"`
 }
 
 type AuthRequest struct {

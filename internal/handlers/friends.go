@@ -5,7 +5,6 @@ import (
 	"api/utils"
 	"log"
 	"net/http"
-	"slices"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -116,19 +115,8 @@ func DeleteFriend(c *gin.Context) {
 		UserId:   userId,
 		FriendId: &friendID,
 	}
-	msgs, err := deleteMessagesRequest(msgReq)
-	if err != nil {
+	if err := deleteMessagesRequest(msgReq); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления сообщений"})
-		return
-	}
-	mesgs := *msgs
-	for i := range mesgs {
-		user.SentMessages = append(user.SentMessages[:slices.Index(user.SentMessages, mesgs[i])], user.SentMessages[slices.Index(user.SentMessages, mesgs[i])+1:]...)
-		user.ReceivedMessages = append(user.ReceivedMessages[:slices.Index(user.ReceivedMessages, mesgs[i])], user.ReceivedMessages[slices.Index(user.ReceivedMessages, mesgs[i])+1:]...)
-	}
-	if err := tx.Save(&user).Error; err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления сообщений друга"})
 		return
 	}
 	tx.Commit()

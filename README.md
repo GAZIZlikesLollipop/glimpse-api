@@ -107,6 +107,16 @@ Bash
 ```bash
 minikube tunnel
 ```
+or
+
+Получаете имена:
+```bash
+kubectl get pods -n kong
+```
+И Используете вот тут:
+```bash
+kubectl port-forward -n kong <имя kong service> 8080:8000 --address 0.0.0.0
+```
 
 > **Внимание:** Не закрывайте это окно!
 
